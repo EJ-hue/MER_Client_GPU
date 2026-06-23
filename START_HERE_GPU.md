@@ -68,7 +68,7 @@ Or step by step:
 python tools/smoke_step1_cpu.py
 python tools/smoke_step2_cpu.py
 python tools/smoke_ablation_cpu.py
-python tools/run_ablation_gpu.py --epochs 1 --max_samples 16 --configs config_1_pure_base
+python tools/run_ablation_gpu.py --epochs 1 --max_samples 16 --configs config_8_proposed_unified
 ```
 
 All steps should finish without errors.
@@ -111,7 +111,7 @@ python Stage1_DataPipeline/main_step2.py --max_workers 8 --output_subdir tensors
 Quick verification (4 key configs):
 
 ```powershell
-python tools/run_ablation_gpu.py --epochs 5 --configs config_1_pure_base config_3_spatial_only config_7_full_no_attention config_8_proposed_unified
+python tools/run_ablation_gpu.py --epochs 5 --configs config_8_proposed_unified
 ```
 
 Full 12-config matrix:

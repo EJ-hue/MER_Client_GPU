@@ -12,7 +12,7 @@ import sys
 
 def main() -> int:
     print("=" * 60)
-    print("MER Initial Project - Environment Check")
+    print("MER Client GPU - Environment Check")
     print("=" * 60)
     print(f"Python        : {sys.version.split()[0]} ({platform.system()} {platform.release()})")
     print(f"Executable    : {sys.executable}")
@@ -35,11 +35,11 @@ def main() -> int:
         print("  python tools/run_ablation_gpu.py --epochs 1 --max_samples 16")
     else:
         print("\nGPU mode is NOT available on this machine.")
-        print("Use CPU mode instead:")
-        print("  python tools/run_ablation_cpu.py --epochs 1 --max_samples 16")
+        print("Install CUDA PyTorch: pip install -r requirements.txt")
+        print("Smoke tests still work on CPU:")
+        print("  python tools/smoke_step1_cpu.py")
 
-    print("\nCPU mode is always available if PyTorch is installed.")
-    print("Synthetic smoke tests (no dataset):")
+    print("\nSynthetic smoke tests (no dataset):")
     print("  python tools/smoke_step1_cpu.py")
     print("  python tools/smoke_step2_cpu.py")
     print("  python tools/smoke_ablation_cpu.py")

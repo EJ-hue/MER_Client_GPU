@@ -293,8 +293,12 @@ for evm, simam, cnn, trans in itertools.product([False, True], repeat=4):
 
 
 def get_ablation_matrix() -> List[AblationConfig]:
-    """Return a fresh copy of the canonical 8-cell ablation matrix."""
+    """Return a fresh copy of the canonical 12-cell ablation matrix."""
     return list(ABLATION_MATRIX)
+
+
+DEFAULT_GPU_CONFIGS = ["config_8_proposed_unified"]
+ALL_GPU_CONFIGS = [c.name for c in ABLATION_MATRIX if c.is_valid()]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

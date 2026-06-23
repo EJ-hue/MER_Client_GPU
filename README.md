@@ -1,4 +1,6 @@
-# MER Initial Version — GPU Client Package
+# MER Client GPU — Canonical Delivery Package
+
+**This folder (`MER_Client_GPU`) is the client delivery project.** All development, fixes, and releases happen here.
 
 **Start here.** This package is for the client machine with **NVIDIA GPU + CUDA 12.6**.
 
@@ -108,16 +110,24 @@ python Stage1_DataPipeline/main_step2.py --max_workers 8 --output_subdir tensors
 
 ### 4) Ablation — GPU training
 
-Quick verification (4 key configs):
+Default (proposed model only):
 
 ```powershell
-python tools/run_ablation_gpu.py --epochs 5 --configs config_1_pure_base config_3_spatial_only config_7_full_no_attention config_8_proposed_unified
+python tools/run_ablation_gpu.py --epochs 5 --configs config_8_proposed_unified
 ```
 
-Full 12-config matrix:
+Full 12 valid configs:
 
 ```powershell
-python tools/run_ablation_gpu.py
+python tools/run_ablation_gpu.py --configs config_1_pure_base config_2_temporal_only config_3_spatial_only config_4_motion_amp_base config_5_attention_base config_6_full_stage2_noevm config_7_full_no_attention config_8_proposed_unified config_9_permutation config_10_permutation config_11_permutation config_12_permutation
+```
+
+Or use the GUI: tick **All 12 ablation configs**.
+
+LOSO (slow):
+
+```powershell
+python tools/run_ablation_gpu.py --protocol loso --epochs 50 --configs config_8_proposed_unified
 ```
 
 ---
@@ -150,6 +160,8 @@ After your first real-data run, please share:
 | `GPU_MODE.md` | Full GPU install, commands, troubleshooting |
 | `INITIAL_VERSION.md` | Complete runbook |
 | `CLIENT_INITIAL_VERSION.md` | Scope and delivery summary |
+| `JUNE19_GUI.md` | GUI usage (LOSO, both media, config options) |
+| `BUILD_CLIENT_GPU.ps1` | Package clean zip for client |
 
 ---
 

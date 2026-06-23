@@ -7,7 +7,7 @@ if (Test-Path "..\Stage1_DataPipeline") {
 }
 
 if (-not (Test-Path ".venv\Scripts\python.exe")) {
-    Write-Host "Run .\client_delivery\setup_gpu.ps1 first." -ForegroundColor Red
+    Write-Host "Run .\setup_gpu.ps1 first." -ForegroundColor Red
     exit 1
 }
 
@@ -25,8 +25,8 @@ if (-not (Test-Path $csv)) {
     exit 0
 }
 
-Write-Host "`n=== GPU ablation (4 key configs, grouped labels) ===" -ForegroundColor Cyan
-& $py tools/run_ablation_gpu.py --label_mode grouped --epochs 5 --configs config_1_pure_base config_3_spatial_only config_7_full_no_attention config_8_proposed_unified
+Write-Host "`n=== GPU ablation (config_8, grouped labels) ===" -ForegroundColor Cyan
+& $py tools/run_ablation_gpu.py --label_mode grouped --epochs 5 --configs config_8_proposed_unified
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "`n=== Plots + literature comparison ===" -ForegroundColor Cyan

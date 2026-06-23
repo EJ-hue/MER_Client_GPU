@@ -214,6 +214,49 @@ class BaseMetadataUnifier(abc.ABC):
             return any(frames_dir.glob(ext) for ext in exts)
         return False
 
+    @staticmethod
+    def _image_folder_has_frames(folder: Path) -> bool:
+        if not folder.is_dir():
+            return False
+        exts = ("*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG")
+        return any(folder.glob(ext) for ext in exts)
+
+    @classmethod
+    def resolve_casme2_media_path(
+        cls,
+        cfg: "CASMEIIConfig",
+        subject_id: int,
+        video_id: str,
+    ) -> Path:
+        """Resolve per-clip media path for avi, images, or both (images first)."""
+        subject_folder = (
+            f"{cfg.subject_folder_prefix}"
+            f"{subject_id:0{cfg.subject_folder_pad}d}"
+        )
+        mode = getattr(cfg, "media_mode", "avi")
+        root = cfg.frames_root
+
+        if mode == "images":
+            return root / subject_folder / video_id
+        if mode == "avi":
+            return root / subject_folder / f"{video_id}.avi"
+
+        image_candidates = [
+            root / "Cropped" / subject_folder / video_id,
+            root / subject_folder / video_id,
+        ]
+        avi_candidates = [
+            root / "Video" / subject_folder / f"{video_id}.avi",
+            root / subject_folder / f"{video_id}.avi",
+        ]
+        for folder in image_candidates:
+            if cls._image_folder_has_frames(folder):
+                return folder
+        for avi_path in avi_candidates:
+            if avi_path.is_file():
+                return avi_path
+        return image_candidates[0]
+
     def _validate(self, df: pd.DataFrame) -> None:
         """
         Validate that the DataFrame conforms to the unified schema.
@@ -367,14 +410,7 @@ class CASMEIIUnifier(BaseMetadataUnifier):
             seq_len = self._calculate_sequence_length(onset, offset, video_id)
 
             # ── Frame directory ─────────────────────────────────────
-            subject_folder = (
-                f"{cfg.subject_folder_prefix}"
-                f"{subject_id:0{cfg.subject_folder_pad}d}"
-            )
-            if getattr(cfg, "media_mode", "avi") == "images":
-                frames_dir = cfg.frames_root / subject_folder / video_id
-            else:
-                frames_dir = cfg.frames_root / subject_folder / f"{video_id}.avi"
+            frames_dir = BaseMetadataUnifier.resolve_casme2_media_path(cfg, subject_id, video_id)
             frames_exist = self._check_frames_directory(frames_dir)
 
             rows.append({

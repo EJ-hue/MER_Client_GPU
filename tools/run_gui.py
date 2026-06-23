@@ -18,12 +18,19 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from Ablation_Study.ablation_config import ALL_GPU_CONFIGS, DEFAULT_GPU_CONFIGS
+from Ablation_Study.result_cleanup import clear_results_dir
+
 PYTHON = sys.executable
 SETTINGS_PATH = PROJECT_ROOT / "gui_settings.json"
 
 DEFAULT_EXCEL = PROJECT_ROOT / "DATASETS" / "CASME II" / "CASME2-coding-20140508.xlsx"
 DEFAULT_MEDIA_AVI = PROJECT_ROOT / "Processed_Data" / "Raw_Videos_Magnified" / "CASME2"
 DEFAULT_MEDIA_IMAGES = PROJECT_ROOT / "DATASETS" / "CASME II" / "Cropped"
+DEFAULT_MEDIA_BOTH = PROJECT_ROOT / "DATASETS" / "CASME II"
 
 # (status_key, short_label, full_label)
 VERIFICATION_CHECKS = [
@@ -32,18 +39,13 @@ VERIFICATION_CHECKS = [
     ("smoke2", "Smoke S2", "Smoke test — Step 2 wiring"),
     ("smoke_ablation", "Smoke abl.", "Smoke test — ablation wiring"),
     ("preprocess", "Preprocess", "Real data — Step 1 + Step 2 (CPU)"),
-    ("gpu_grouped", "GPU 3-cls", "GPU ablation — grouped labels (4 configs)"),
+    ("gpu_grouped", "GPU 3-cls", "GPU ablation — grouped labels (config_8 or all 12)"),
     ("gpu_individual", "GPU indiv.", "GPU ablation — individual emotions"),
     ("plots", "Plots", "Result plots"),
     ("literature", "Literature", "Literature comparison table"),
 ]
 
-KEY_CONFIGS = [
-    "config_1_pure_base",
-    "config_3_spatial_only",
-    "config_7_full_no_attention",
-    "config_8_proposed_unified",
-]
+DEFAULT_PROTOCOL = "holdout"
 
 
 class MerTestGuiApp(tk.Tk):
@@ -60,6 +62,8 @@ class MerTestGuiApp(tk.Tk):
         self.excel_var = tk.StringVar()
         self.media_var = tk.StringVar()
         self.media_mode_var = tk.StringVar(value="avi")
+        self.protocol_var = tk.StringVar(value=DEFAULT_PROTOCOL)
+        self.all_configs_var = tk.BooleanVar(value=False)
         self.epochs_var = tk.StringVar(value="5")
         self.workers_var = tk.StringVar(value="8")
         self.skip_preprocess_var = tk.BooleanVar(value=False)
@@ -97,6 +101,8 @@ class MerTestGuiApp(tk.Tk):
         excel = str(DEFAULT_EXCEL)
         media = str(DEFAULT_MEDIA_AVI)
         media_mode = "avi"
+        protocol = DEFAULT_PROTOCOL
+        all_configs = False
         if SETTINGS_PATH.exists():
             try:
                 data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
@@ -106,11 +112,15 @@ class MerTestGuiApp(tk.Tk):
                     data.get("casme2_frames_root", media),
                 )
                 media_mode = data.get("casme2_media_mode", media_mode)
+                protocol = data.get("ablation_protocol", protocol)
+                all_configs = bool(data.get("ablation_all_configs", all_configs))
             except (json.JSONDecodeError, OSError):
                 pass
         self.excel_var.set(excel)
         self.media_var.set(media)
         self.media_mode_var.set(media_mode)
+        self.protocol_var.set(protocol if protocol in ("holdout", "loso") else DEFAULT_PROTOCOL)
+        self.all_configs_var.set(all_configs)
 
     def _save_settings(self) -> None:
         try:
@@ -120,6 +130,8 @@ class MerTestGuiApp(tk.Tk):
                         "casme2_excel": self.excel_var.get().strip(),
                         "casme2_media_root": self.media_var.get().strip(),
                         "casme2_media_mode": self.media_mode_var.get().strip(),
+                        "ablation_protocol": self.protocol_var.get().strip(),
+                        "ablation_all_configs": self.all_configs_var.get(),
                     },
                     indent=2,
                 ),
@@ -171,7 +183,8 @@ class MerTestGuiApp(tk.Tk):
             text=(
                 "Smoke tests — no CASME-II files needed (they reset Step 1 to 1 synthetic clip).\n"
                 "Real-data — Excel + media root; Preprocess always rebuilds CSV + tensors (--force).\n"
-                "Media type: '.avi clips' OR 'image folders' (Cropped: subXX/Filename/*.jpg)."
+                "Media type: avi | images | both (Cropped folders first, then Video/*.avi fallback).\n"
+                "GPU ablation defaults to config_8; enable LOSO or all 12 configs in Options."
             ),
             justify="left",
         ).pack(anchor="w", padx=8, pady=4)
@@ -187,13 +200,13 @@ class MerTestGuiApp(tk.Tk):
         ttk.Combobox(
             mode_row,
             textvariable=self.media_mode_var,
-            values=("avi", "images"),
+            values=("avi", "images", "both"),
             state="readonly",
             width=12,
         ).pack(side="left", padx=6)
         ttk.Label(
             mode_row,
-            text="avi = subXX/clip.avi  |  images = subXX/clip/*.jpg",
+            text="avi = subXX/clip.avi  |  images = subXX/clip/*.jpg  |  both = Cropped then Video",
             foreground="#555",
         ).pack(side="left", padx=8)
 
@@ -209,6 +222,21 @@ class MerTestGuiApp(tk.Tk):
             row0,
             text="Skip preprocessing (tensors already built)",
             variable=self.skip_preprocess_var,
+        ).pack(side="left")
+        row1 = ttk.Frame(opts)
+        row1.pack(fill="x", padx=8, pady=2)
+        ttk.Label(row1, text="Validation protocol:").pack(side="left")
+        ttk.Combobox(
+            row1,
+            textvariable=self.protocol_var,
+            values=("holdout", "loso"),
+            state="readonly",
+            width=10,
+        ).pack(side="left", padx=(4, 16))
+        ttk.Checkbutton(
+            row1,
+            text="All 12 ablation configs (default: config_8 only)",
+            variable=self.all_configs_var,
         ).pack(side="left")
 
         btns = ttk.LabelFrame(controls, text="Run tests")
@@ -271,11 +299,12 @@ class MerTestGuiApp(tk.Tk):
 
     def _browse_media(self) -> None:
         mode = self.media_mode_var.get()
-        title = (
-            "Select Cropped image root (sub01…sub26 folders with jpg inside)"
-            if mode == "images"
-            else "Select .avi media root (sub01…sub26 with .avi files)"
-        )
+        if mode == "images":
+            title = "Select Cropped image root (sub01…sub26 folders with jpg inside)"
+        elif mode == "both":
+            title = "Select CASME-II root (folder containing Cropped/ and Video/)"
+        else:
+            title = "Select .avi media root (sub01…sub26 with .avi files)"
         path = filedialog.askdirectory(
             title=title,
             initialdir=self.media_var.get() or str(PROJECT_ROOT),
@@ -283,6 +312,44 @@ class MerTestGuiApp(tk.Tk):
         if path:
             self.media_var.set(path)
             self._save_settings()
+
+    def _selected_ablation_configs(self) -> list[str]:
+        if self.all_configs_var.get():
+            return list(ALL_GPU_CONFIGS)
+        return list(DEFAULT_GPU_CONFIGS)
+
+    def _ablation_argv(
+        self,
+        *,
+        label_mode: str,
+        output_root: str | None = None,
+        configs: list[str] | None = None,
+    ) -> list[str]:
+        epochs = self.epochs_var.get().strip() or "5"
+        protocol = self.protocol_var.get().strip() or DEFAULT_PROTOCOL
+        selected = configs if configs is not None else self._selected_ablation_configs()
+        argv = [
+            PYTHON,
+            self._tool("run_ablation_gpu.py"),
+            "--label_mode",
+            label_mode,
+            "--epochs",
+            epochs,
+            "--protocol",
+            protocol,
+            "--configs",
+            *selected,
+        ]
+        if output_root:
+            argv.extend(["--output_root", output_root])
+        argv.append("--fresh")
+        return argv
+
+    def _clear_ablation_results(self, results_root: Path) -> None:
+        removed = clear_results_dir(results_root)
+        self._append_log(
+            f"\nCleared {removed} prior result item(s) from:\n  {results_root}\n"
+        )
 
     def _step1_argv(self, *, force: bool = False) -> list[str]:
         argv = [PYTHON, self._stage("main_step1.py"), "--dataset_mode", "casme2_only"]
@@ -293,7 +360,7 @@ class MerTestGuiApp(tk.Tk):
         if media:
             argv.extend(["--casme2_frames_root", media])
         mode = self.media_mode_var.get().strip()
-        if mode in ("avi", "images"):
+        if mode in ("avi", "images", "both"):
             argv.extend(["--casme2_media_mode", mode])
         if force:
             argv.append("--force")
@@ -371,6 +438,24 @@ class MerTestGuiApp(tk.Tk):
                 f"Folder: {media}\n"
                 "Expected: sub01/clip_name/img0046.jpg\n"
                 "(Use media type 'avi' if you use .avi clips instead.)",
+            )
+        if mode == "both":
+            has_images = (
+                any(media.rglob("Cropped/sub*/*/*.jpg"))
+                or any(media.rglob("sub*/*/*.jpg"))
+            )
+            avi_count = len(list(media.rglob("Video/**/*.avi"))) + len(
+                list(media.rglob("**/*.avi"))
+            )
+            if has_images or avi_count > 0:
+                return True, ""
+            return (
+                False,
+                "No Cropped image folders or Video/*.avi found.\n\n"
+                f"Folder: {media}\n"
+                "Expected layout:\n"
+                "  Cropped/sub01/clip_name/*.jpg\n"
+                "  Video/sub01/clip_name.avi",
             )
         avi_count = len(list(media.rglob("*.avi"))) + len(list(media.rglob("*.AVI")))
         if avi_count > 0:
@@ -641,26 +726,33 @@ class MerTestGuiApp(tk.Tk):
         self._run_script_async("Real-data preprocessing (CPU)", self._preprocess_steps())
 
     def run_gpu_grouped(self) -> None:
-        epochs = self.epochs_var.get().strip() or "5"
+        if self._guard_busy():
+            return
+        results_root = PROJECT_ROOT / "Ablation_Study" / "results"
+        self._clear_ablation_results(results_root)
+        configs = self._selected_ablation_configs()
+        label = f"GPU ablation — grouped ({len(configs)} config(s), {self.protocol_var.get()})"
         self._run_script_async(
-            "GPU ablation — grouped labels",
-            [(
-                "run_ablation_gpu.py",
-                [PYTHON, self._tool("run_ablation_gpu.py"), "--label_mode", "grouped",
-                 "--epochs", epochs, "--configs", *KEY_CONFIGS],
-                "gpu_grouped",
-            )],
+            label,
+            [("run_ablation_gpu.py", self._ablation_argv(label_mode="grouped"), "gpu_grouped")],
         )
 
     def run_gpu_individual(self) -> None:
-        epochs = self.epochs_var.get().strip() or "5"
+        if self._guard_busy():
+            return
+        results_root = PROJECT_ROOT / "Ablation_Study" / "results_individual"
+        self._clear_ablation_results(results_root)
+        configs = self._selected_ablation_configs()
+        label = f"GPU ablation — individual ({len(configs)} config(s), {self.protocol_var.get()})"
         self._run_script_async(
-            "GPU ablation — individual labels",
+            label,
             [(
                 "run_ablation_gpu.py",
-                [PYTHON, self._tool("run_ablation_gpu.py"), "--label_mode", "individual",
-                 "--epochs", epochs, "--configs", "config_1_pure_base", "config_8_proposed_unified",
-                 "--output_root", str(PROJECT_ROOT / "Ablation_Study" / "results_individual")],
+                self._ablation_argv(
+                    label_mode="individual",
+                    output_root=str(PROJECT_ROOT / "Ablation_Study" / "results_individual"),
+                    configs=configs,
+                ),
                 "gpu_individual",
             )],
         )
@@ -681,8 +773,14 @@ class MerTestGuiApp(tk.Tk):
         if self._guard_busy():
             return
 
-        epochs = self.epochs_var.get().strip() or "5"
         skip_pre = self.skip_preprocess_var.get()
+        self._clear_ablation_results(PROJECT_ROOT / "Ablation_Study" / "results")
+        self._clear_ablation_results(PROJECT_ROOT / "Ablation_Study" / "results_individual")
+        grouped_argv = self._ablation_argv(label_mode="grouped")
+        individual_argv = self._ablation_argv(
+            label_mode="individual",
+            output_root=str(PROJECT_ROOT / "Ablation_Study" / "results_individual"),
+        )
 
         steps: list[tuple[str, list[str], str | None]] = [
             ("check_environment.py", [PYTHON, self._tool("check_environment.py")], "env"),
@@ -705,16 +803,8 @@ class MerTestGuiApp(tk.Tk):
             ))
 
         steps.extend([
-            ("GPU grouped ablation", [
-                PYTHON, self._tool("run_ablation_gpu.py"),
-                "--label_mode", "grouped", "--epochs", epochs, "--configs", *KEY_CONFIGS,
-            ], "gpu_grouped"),
-            ("GPU individual ablation", [
-                PYTHON, self._tool("run_ablation_gpu.py"),
-                "--label_mode", "individual", "--epochs", epochs,
-                "--configs", "config_1_pure_base", "config_8_proposed_unified",
-                "--output_root", str(PROJECT_ROOT / "Ablation_Study" / "results_individual"),
-            ], "gpu_individual"),
+            ("GPU grouped ablation", grouped_argv, "gpu_grouped"),
+            ("GPU individual ablation", individual_argv, "gpu_individual"),
             ("plot_ablation_results.py", [PYTHON, self._tool("plot_ablation_results.py")], "plots"),
             ("compare_with_literature.py", [PYTHON, self._tool("compare_with_literature.py")], "literature"),
         ])

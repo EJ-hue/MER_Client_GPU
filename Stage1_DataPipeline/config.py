@@ -63,6 +63,7 @@ class CASMEIIConfig:
 
     # "avi"    → {frames_root}/subXX/{Filename}.avi
     # "images" → {frames_root}/subXX/{Filename}/  (jpg/png frame folders, CASME-II Cropped)
+    # "both"   → image folder if present, else .avi (Cropped/ + Video/ under frames_root)
     media_mode: str = "avi"
 
 

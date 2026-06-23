@@ -385,6 +385,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     p.add_argument("--configs", nargs="+", default=None,
                    help="Run only these config names (space-separated).")
+    p.add_argument(
+        "--fresh",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Clear output_root before the sweep (default: true).",
+    )
     return p.parse_args()
 
 
@@ -431,6 +437,11 @@ def main() -> int:
     args = parse_args()
     exp = build_experiment_config(args)
     set_seed(exp.seed)
+    if args.fresh:
+        from result_cleanup import clear_results_dir
+
+        removed = clear_results_dir(exp.output_root)
+        print(f"[fresh] Cleared {removed} item(s) from {exp.output_root}")
     orchestrator = AblationOrchestrator(
         exp,
         max_samples=args.max_samples,

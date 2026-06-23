@@ -36,7 +36,7 @@ Or use **Real preprocessing** in `tools/run_gui.py`.
 ## GPU ablation
 
 ```powershell
-.\.venv\Scripts\python.exe tools/run_ablation_gpu.py --label_mode grouped --epochs 5 --configs config_1_pure_base config_3_spatial_only config_7_full_no_attention config_8_proposed_unified
+.\.venv\Scripts\python.exe tools/run_ablation_gpu.py --label_mode grouped --epochs 5 --configs config_8_proposed_unified
 ```
 
 ## Troubleshooting

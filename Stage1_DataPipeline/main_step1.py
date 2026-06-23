@@ -89,9 +89,9 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--casme2_media_mode",
-        choices=["avi", "images"],
+        choices=["avi", "images", "both"],
         default=None,
-        help="avi = .avi clips | images = Cropped image folders per clip.",
+        help="avi = .avi clips | images = Cropped folders | both = images then avi fallback.",
     )
     return parser.parse_args()
 

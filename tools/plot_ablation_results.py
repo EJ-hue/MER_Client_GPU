@@ -6,7 +6,7 @@ Generate comparison plots from ablation results (summary.csv + per-config JSON).
 Outputs under Ablation_Study/results/plots/:
   - accuracy_macro_f1_bar.png
   - per_class_f1_grouped.png
-  - key_configs_confusion_side_by_side.png (if key configs present)
+  - key_configs_confusion_side_by_side.png (alias: confusion_matrices.png)
 """
 
 from __future__ import annotations
@@ -27,6 +27,11 @@ KEY_CONFIGS = [
     "config_7_full_no_attention",
     "config_8_proposed_unified",
 ]
+
+
+def _configs_in_summary(df: pd.DataFrame) -> List[str]:
+    """Return config folder names from the current summary.csv only."""
+    return [str(name) for name in df["config_name"].tolist()]
 
 
 def _short_name(folder_name: str) -> str:
@@ -83,7 +88,7 @@ def plot_accuracy_f1(df: pd.DataFrame, out_dir: Path) -> Path:
     ax.set_title("Ablation Configurations — Accuracy vs Macro F1")
     ax.legend()
     ax.grid(axis="y", alpha=0.3)
-    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.28)
     out_path = out_dir / "accuracy_macro_f1_bar.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
@@ -132,7 +137,12 @@ def plot_per_class_f1(results_root: Path, df: pd.DataFrame, out_dir: Path) -> Op
     return out_path
 
 
-def plot_key_confusion_side_by_side(results_root: Path, out_dir: Path) -> Optional[Path]:
+def plot_confusion_side_by_side(
+    results_root: Path,
+    out_dir: Path,
+    df: pd.DataFrame,
+) -> Optional[Path]:
+    """Plot confusion matrices for every config row in summary.csv."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -141,29 +151,33 @@ def plot_key_confusion_side_by_side(results_root: Path, out_dir: Path) -> Option
     panels = []
     titles = []
     class_names: List[str] = []
-    for key in KEY_CONFIGS:
-        matches = [p for p in results_root.iterdir() if p.is_dir() and p.name.startswith(key + "__")]
-        if not matches:
-            continue
-        cfg_dir = matches[0]
+    for config_name in _configs_in_summary(df):
+        cfg_dir = results_root / config_name
+        if not cfg_dir.is_dir():
+            matches = [
+                p for p in results_root.iterdir()
+                if p.is_dir() and p.name.startswith(config_name.split("__")[0] + "__")
+            ]
+            cfg_dir = matches[0] if matches else cfg_dir
         cm_path = cfg_dir / "confusion_matrix.npy"
         json_path = cfg_dir / "final_results.json"
         if not cm_path.exists():
             continue
         cm = np.load(cm_path)
         panels.append(cm)
-        titles.append(key)
+        titles.append(_short_name(config_name))
         if json_path.exists() and not class_names:
             payload = json.loads(json_path.read_text(encoding="utf-8"))
             class_names = payload.get("class_names", [])
 
-    if len(panels) < 2:
+    if not panels:
         return None
 
-    fig, axes = plt.subplots(1, len(panels), figsize=(4 * len(panels), 4))
-    if len(panels) == 1:
-        axes = [axes]
-    for ax, cm, title in zip(axes, panels, titles):
+    ncols = min(len(panels), 4)
+    nrows = (len(panels) + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 4 * nrows))
+    axes_list = np.atleast_1d(axes).ravel().tolist()
+    for ax, cm, title in zip(axes_list, panels, titles):
         im = ax.imshow(cm, cmap="Blues")
         ax.set_title(title, fontsize=9)
         if class_names:
@@ -172,12 +186,19 @@ def plot_key_confusion_side_by_side(results_root: Path, out_dir: Path) -> Option
             ax.set_xticklabels(class_names, rotation=45, ha="right", fontsize=7)
             ax.set_yticklabels(class_names, fontsize=7)
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    fig.suptitle("Key Configurations — Confusion Matrices", fontsize=10)
+    for ax in axes_list[len(panels):]:
+        ax.axis("off")
+    fig.suptitle("Confusion Matrices — Current Run", fontsize=10)
     fig.tight_layout()
-    out_path = out_dir / "key_configs_confusion_side_by_side.png"
+    out_path = out_dir / "confusion_matrices.png"
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     return out_path
+
+
+def plot_key_confusion_side_by_side(results_root: Path, out_dir: Path, df: pd.DataFrame) -> Optional[Path]:
+    """Backward-compatible alias — plots only configs present in summary.csv."""
+    return plot_confusion_side_by_side(results_root, out_dir, df)
 
 
 def main() -> int:
@@ -209,9 +230,14 @@ def main() -> int:
     p2 = plot_per_class_f1(results_root, df, out_dir)
     if p2:
         paths.append(p2)
-    p3 = plot_key_confusion_side_by_side(results_root, out_dir)
+    p3 = plot_confusion_side_by_side(results_root, out_dir, df)
     if p3:
         paths.append(p3)
+        legacy = out_dir / "key_configs_confusion_side_by_side.png"
+        if legacy != p3 and p3.exists():
+            import shutil
+            shutil.copy2(p3, legacy)
+            paths.append(legacy)
 
     print("Plots written:")
     for p in paths:
