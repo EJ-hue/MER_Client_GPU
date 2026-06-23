@@ -1,0 +1,50 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Runtime outputs (generated on client machine)
+Processed_Data/checkpoints/
+Processed_Data/intermediates/
+Processed_Data/tensors/
+Processed_Data/tensors_raw/
+Processed_Data/smoke_tensors/
+Processed_Data/*.csv
+Processed_Data/**/*.npy
+
+Ablation_Study/results/**/*
+!Ablation_Study/results/.gitkeep
+Ablation_Study/results_individual/**/*
+!Ablation_Study/results_individual/.gitkeep
+
+# GUI / temp
+gui_settings.json
+tmp/
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Secrets
+.env
+*.pem
+
+# Large dataset files (client provides CASME-II locally)
+DATASETS/**/*.xlsx
+DATASETS/**/*.avi
+DATASETS/**/*.jpg
+DATASETS/**/*.png
+DATASETS/**/Cropped/
+DATASETS/**/Video/
