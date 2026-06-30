@@ -66,6 +66,9 @@ class MerTestGuiApp(tk.Tk):
         self.all_configs_var = tk.BooleanVar(value=False)
         self.full_loso_var = tk.BooleanVar(value=False)
         self.loso_folds_var = tk.StringVar(value="5")
+        self.label_mode_var = tk.StringVar(value="grouped")
+        self.include_others_var = tk.BooleanVar(value=False)
+        self.val_fraction_var = tk.StringVar(value="0.2")
         self.epochs_var = tk.StringVar(value="5")
         self.workers_var = tk.StringVar(value="8")
         self.skip_preprocess_var = tk.BooleanVar(value=False)
@@ -107,6 +110,9 @@ class MerTestGuiApp(tk.Tk):
         all_configs = False
         full_loso = False
         loso_folds = "5"
+        label_mode = "grouped"
+        include_others = False
+        val_fraction = "0.2"
         if SETTINGS_PATH.exists():
             try:
                 data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
@@ -120,6 +126,9 @@ class MerTestGuiApp(tk.Tk):
                 all_configs = bool(data.get("ablation_all_configs", all_configs))
                 full_loso = bool(data.get("ablation_full_loso", full_loso))
                 loso_folds = str(data.get("ablation_loso_folds", loso_folds))
+                label_mode = data.get("ablation_label_mode", label_mode)
+                include_others = bool(data.get("ablation_include_others", include_others))
+                val_fraction = str(data.get("ablation_val_fraction", val_fraction))
             except (json.JSONDecodeError, OSError):
                 pass
         self.excel_var.set(excel)
@@ -129,6 +138,9 @@ class MerTestGuiApp(tk.Tk):
         self.all_configs_var.set(all_configs)
         self.full_loso_var.set(full_loso)
         self.loso_folds_var.set(loso_folds)
+        self.label_mode_var.set(label_mode if label_mode in ("grouped", "raw", "individual") else "grouped")
+        self.include_others_var.set(include_others)
+        self.val_fraction_var.set(val_fraction)
 
     def _save_settings(self) -> None:
         try:
@@ -142,6 +154,9 @@ class MerTestGuiApp(tk.Tk):
                         "ablation_all_configs": self.all_configs_var.get(),
                         "ablation_full_loso": self.full_loso_var.get(),
                         "ablation_loso_folds": self.loso_folds_var.get().strip(),
+                        "ablation_label_mode": self.label_mode_var.get().strip(),
+                        "ablation_include_others": self.include_others_var.get(),
+                        "ablation_val_fraction": self.val_fraction_var.get().strip(),
                     },
                     indent=2,
                 ),
@@ -262,6 +277,28 @@ class MerTestGuiApp(tk.Tk):
             text="Default 5 folds ≈ research pilot; use 50–60 epochs for real training",
             foreground="#555",
         ).pack(side="left")
+        row3 = ttk.Frame(opts)
+        row3.pack(fill="x", padx=8, pady=2)
+        ttk.Label(row3, text="Label mode:").pack(side="left")
+        ttk.Combobox(
+            row3,
+            textvariable=self.label_mode_var,
+            values=("grouped", "raw", "individual"),
+            state="readonly",
+            width=12,
+        ).pack(side="left", padx=(4, 12))
+        ttk.Checkbutton(
+            row3,
+            text="Include Others (4-class grouped)",
+            variable=self.include_others_var,
+        ).pack(side="left", padx=(0, 12))
+        ttk.Label(row3, text="Holdout val %:").pack(side="left")
+        ttk.Entry(row3, textvariable=self.val_fraction_var, width=5).pack(side="left", padx=(4, 8))
+        ttk.Label(
+            row3,
+            text="raw = Excel labels, no Positive/Negative grouping",
+            foreground="#555",
+        ).pack(side="left")
 
         btns = ttk.LabelFrame(controls, text="Run tests")
         btns.pack(fill="x", **pad)
@@ -345,12 +382,12 @@ class MerTestGuiApp(tk.Tk):
     def _ablation_argv(
         self,
         *,
-        label_mode: str,
         output_root: str | None = None,
         configs: list[str] | None = None,
     ) -> list[str]:
         epochs = self.epochs_var.get().strip() or "5"
         protocol = self.protocol_var.get().strip() or DEFAULT_PROTOCOL
+        label_mode = self.label_mode_var.get().strip() or "grouped"
         selected = configs if configs is not None else self._selected_ablation_configs()
         argv = [
             PYTHON,
@@ -364,6 +401,11 @@ class MerTestGuiApp(tk.Tk):
             "--configs",
             *selected,
         ]
+        if self.include_others_var.get() and label_mode == "grouped":
+            argv.append("--include_others")
+        val_frac = self.val_fraction_var.get().strip()
+        if val_frac:
+            argv.extend(["--val_fraction", val_frac])
         if output_root:
             argv.extend(["--output_root", output_root])
         if protocol == "loso":
@@ -405,6 +447,7 @@ class MerTestGuiApp(tk.Tk):
                 [
                     PYTHON, self._stage("main_step2.py"),
                     "--force",
+                    "--use_evm",
                     "--max_workers", workers,
                     "--output_subdir", "tensors",
                     "--dataset_filter", "CASME_II",
@@ -761,10 +804,10 @@ class MerTestGuiApp(tk.Tk):
         results_root = PROJECT_ROOT / "Ablation_Study" / "results"
         self._clear_ablation_results(results_root)
         configs = self._selected_ablation_configs()
-        label = f"GPU ablation — grouped ({len(configs)} config(s), {self.protocol_var.get()})"
+        label = f"GPU ablation — {self.label_mode_var.get()} ({len(configs)} config(s), {self.protocol_var.get()})"
         self._run_script_async(
             label,
-            [("run_ablation_gpu.py", self._ablation_argv(label_mode="grouped"), "gpu_grouped")],
+            [("run_ablation_gpu.py", self._ablation_argv(), "gpu_grouped")],
         )
 
     def run_gpu_individual(self) -> None:
@@ -773,13 +816,12 @@ class MerTestGuiApp(tk.Tk):
         results_root = PROJECT_ROOT / "Ablation_Study" / "results_individual"
         self._clear_ablation_results(results_root)
         configs = self._selected_ablation_configs()
-        label = f"GPU ablation — individual ({len(configs)} config(s), {self.protocol_var.get()})"
+        label = f"GPU ablation — {self.label_mode_var.get()} ({len(configs)} config(s), {self.protocol_var.get()})"
         self._run_script_async(
             label,
             [(
                 "run_ablation_gpu.py",
                 self._ablation_argv(
-                    label_mode="individual",
                     output_root=str(PROJECT_ROOT / "Ablation_Study" / "results_individual"),
                     configs=configs,
                 ),
@@ -806,9 +848,8 @@ class MerTestGuiApp(tk.Tk):
         skip_pre = self.skip_preprocess_var.get()
         self._clear_ablation_results(PROJECT_ROOT / "Ablation_Study" / "results")
         self._clear_ablation_results(PROJECT_ROOT / "Ablation_Study" / "results_individual")
-        grouped_argv = self._ablation_argv(label_mode="grouped")
+        grouped_argv = self._ablation_argv()
         individual_argv = self._ablation_argv(
-            label_mode="individual",
             output_root=str(PROJECT_ROOT / "Ablation_Study" / "results_individual"),
         )
 
