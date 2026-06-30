@@ -69,6 +69,7 @@ class MerTestGuiApp(tk.Tk):
         self.label_mode_var = tk.StringVar(value="grouped")
         self.include_others_var = tk.BooleanVar(value=False)
         self.val_fraction_var = tk.StringVar(value="0.2")
+        self.batch_size_var = tk.StringVar(value="4")
         self.epochs_var = tk.StringVar(value="5")
         self.workers_var = tk.StringVar(value="8")
         self.skip_preprocess_var = tk.BooleanVar(value=False)
@@ -113,6 +114,7 @@ class MerTestGuiApp(tk.Tk):
         label_mode = "grouped"
         include_others = False
         val_fraction = "0.2"
+        batch_size = "4"
         if SETTINGS_PATH.exists():
             try:
                 data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
@@ -129,6 +131,7 @@ class MerTestGuiApp(tk.Tk):
                 label_mode = data.get("ablation_label_mode", label_mode)
                 include_others = bool(data.get("ablation_include_others", include_others))
                 val_fraction = str(data.get("ablation_val_fraction", val_fraction))
+                batch_size = str(data.get("ablation_batch_size", batch_size))
             except (json.JSONDecodeError, OSError):
                 pass
         self.excel_var.set(excel)
@@ -141,6 +144,7 @@ class MerTestGuiApp(tk.Tk):
         self.label_mode_var.set(label_mode if label_mode in ("grouped", "raw", "individual") else "grouped")
         self.include_others_var.set(include_others)
         self.val_fraction_var.set(val_fraction)
+        self.batch_size_var.set(batch_size)
 
     def _save_settings(self) -> None:
         try:
@@ -157,6 +161,7 @@ class MerTestGuiApp(tk.Tk):
                         "ablation_label_mode": self.label_mode_var.get().strip(),
                         "ablation_include_others": self.include_others_var.get(),
                         "ablation_val_fraction": self.val_fraction_var.get().strip(),
+                        "ablation_batch_size": self.batch_size_var.get().strip(),
                     },
                     indent=2,
                 ),
@@ -241,6 +246,8 @@ class MerTestGuiApp(tk.Tk):
         row0.pack(fill="x", padx=8, pady=4)
         ttk.Label(row0, text="Ablation epochs:").pack(side="left")
         ttk.Entry(row0, textvariable=self.epochs_var, width=6).pack(side="left", padx=(4, 16))
+        ttk.Label(row0, text="Batch size:").pack(side="left")
+        ttk.Entry(row0, textvariable=self.batch_size_var, width=4).pack(side="left", padx=(4, 16))
         ttk.Label(row0, text="Step 2 workers:").pack(side="left")
         ttk.Entry(row0, textvariable=self.workers_var, width=6).pack(side="left", padx=(4, 16))
         ttk.Checkbutton(
@@ -406,6 +413,8 @@ class MerTestGuiApp(tk.Tk):
         val_frac = self.val_fraction_var.get().strip()
         if val_frac:
             argv.extend(["--val_fraction", val_frac])
+        batch_size = self.batch_size_var.get().strip() or "4"
+        argv.extend(["--batch_size", batch_size])
         if output_root:
             argv.extend(["--output_root", output_root])
         if protocol == "loso":

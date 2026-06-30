@@ -259,6 +259,7 @@ class ExperimentConfig:
 
     # ── Optimisation ──────────────────────────────────────────────────────────
     epochs: int = 60
+    # Small default: micro-expression tensors are [3,32,224,224]; transformer configs use ~10GB VRAM at batch 4.
     batch_size: int = 2
     lr: float = 1e-4
     weight_decay: float = 1e-4
